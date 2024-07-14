@@ -450,32 +450,63 @@ class ClassificationDataset:
             else classify_transforms(size=args.imgsz, crop_fraction=args.crop_fraction)
         )
 
-    def __getitem__(self, i):
+    # def __getitem__(self, i):
+    #     """Returns subset of data and targets corresponding to given indices."""
+    #     f, j, fn, im = self.samples[i]  # filename, index, filename.with_suffix('.npy'), image
+    #     if self.cache_ram:
+    #         if im is None:  # Warning: two separate if statements required here, do not combine this with previous line
+    #             # im = self.samples[i][3] = cv2.imread(f, cv2.IMREAD_UNCHANGED)
+    #             with rasterio.open(f) as src: # FIXME: Changed: rasterio used instead of cv2
+    #                 im = src.read()
+    #             im = self.samples[i][3] = im
+    #     elif self.cache_disk:
+    #         if not fn.exists():  # load npy
+    #             # np.save(fn.as_posix(), cv2.imread(f, cv2.IMREAD_UNCHANGED), allow_pickle=False) # FIXME: Changed: rasterio used instead of cv2
+    #             with rasterio.open(f) as src:
+    #                 im = src.read()
+    #             np.save(fn.as_posix(), im, allow_pickle=False)
+    #         im = np.load(fn)
+    #     else:  # read image
+    #         # im = cv2.imread(f, cv2.IMREAD_UNCHANGED)  # BGR
+    #         with rasterio.open(f) as src:
+    #             im = src.read()
+    #         np.save(fn.as_posix(), im, allow_pickle=False)
+    #     # Convert NumPy array to PIL image
+    #     # im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)) #Changed
+    #     # im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGRA2RGBA)) # FIXME: Changed to use rasterio
+    #     with rasterio.open(f) as src:
+    #         im = Image.fromarray(src.read()) # FIXME: Might need to be changed
+    #     sample = self.torch_transforms(im)
+    #     return {"img": sample, "cls": j}
+
+    def getitem(self, i):
         """Returns subset of data and targets corresponding to given indices."""
-        f, j, fn, im = self.samples[i]  # filename, index, filename.with_suffix('.npy'), image
-        if self.cache_ram:
-            if im is None:  # Warning: two separate if statements required here, do not combine this with previous line
-                # im = self.samples[i][3] = cv2.imread(f, cv2.IMREAD_UNCHANGED)
-                with rasterio.open(f) as src: # FIXME: Changed: rasterio used instead of cv2
-                    im = src.read()
-                im = self.samples[i][3] = im
-        elif self.cache_disk:
-            if not fn.exists():  # load npy
-                # np.save(fn.as_posix(), cv2.imread(f, cv2.IMREAD_UNCHANGED), allow_pickle=False) # FIXME: Changed: rasterio used instead of cv2
-                with rasterio.open(f) as src:
-                    im = src.read()
-                np.save(fn.as_posix(), im, allow_pickle=False)
-            im = np.load(fn)
-        else:  # read image
-            # im = cv2.imread(f, cv2.IMREAD_UNCHANGED)  # BGR
+        f, j, fn, im = self.samples[i] # filename, index, filename with '.npy' suffix, image array
+
+        if self.cache_ram and im is None:
             with rasterio.open(f) as src:
                 im = src.read()
-            np.save(fn.as_posix(), im, allow_pickle=False)
-        # Convert NumPy array to PIL image
-        # im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB)) #Changed
-        # im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGRA2RGBA)) # FIXME: Changed to use rasterio
-        with rasterio.open(f) as src:
-            im = Image.fromarray(src.read()) # FIXME: Might need to be changed
+                im = np.transpose(im, (1, 2, 0))
+            self.samples[i][3] = im  # Update the cache in RAM
+
+        elif self.cache_disk:
+            if not fn.exists():  # If cache file does not exist, create it
+                with rasterio.open(f) as src:
+                    im = src.read()
+                    im = np.transpose(im, (1, 2, 0))
+                    np.save(fn.with_suffix('.npy').as_posix(), im, allow_pickle=False)
+            else:
+                im = np.load(fn.with_suffix('.npy').as_posix())
+
+        else:  # If not using any cache, read directly
+            with rasterio.open(f) as src:
+                im = src.read()
+                im = np.transpose(im, (1, 2, 0))
+
+        # Convert the NumPy array to a PIL Image
+        im = Image.fromarray(im.astype(np.uint8))  # Ensure data type is uint8 for proper image handling
+
+        # Apply transformations
         sample = self.torch_transforms(im)
         return {"img": sample, "cls": j}
     

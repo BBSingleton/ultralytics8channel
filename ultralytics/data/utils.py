@@ -190,7 +190,7 @@ def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
     nh, nw = (imgsz[0] // downsample_ratio, imgsz[1] // downsample_ratio)
     # return cv2.resize(mask, (nw, nh)) # FIXME: Changed to use rasterio to support all formats
     with rasterio.Env():
-        rasterio.warp.resize(mask, (nh, nw), method='nearest')
+        mask = rasterio.warp.resize(mask, (nh, nw), method='nearest')
     return mask
 
 def polygons2masks(imgsz, polygons, color, downsample_ratio=1):

@@ -19,7 +19,6 @@ from torch.utils.data import Dataset
 
 from ultralytics.data.utils import FORMATS_HELP_MSG, HELP_URL, IMG_FORMATS
 from ultralytics.utils import DEFAULT_CFG, LOCAL_RANK, LOGGER, NUM_THREADS, TQDM
-import rasterio
 
 
 class BaseDataset(Dataset):
@@ -169,10 +168,12 @@ class BaseDataset(Dataset):
                 if r != 1:  # if sizes are not equal
                     w, h = (min(math.ceil(w0 * r), self.imgsz), min(math.ceil(h0 * r), self.imgsz))
                     # im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR) # FIXME Changed: cv2 to use rasterio
+                    with rasterio.env():
+                        im = rasterio.warp.resize(im, (w, h), method='bilinear')
             elif not (h0 == w0 == self.imgsz):  # resize by stretching image to square imgsz
                 # im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR) # FIXME: cv2 might need to be replaced with rasterio
                 with rasterio.env():
-                    rasterio.warp.resize(im, (self.w, self.h), method='bilinear')
+                    im = rasterio.warp.resize(im, (self.w, self.h), method='bilinear')
             # Add to buffer if training with augmentations
             if self.augment:
                 self.ims[i], self.im_hw0[i], self.im_hw[i] = im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
