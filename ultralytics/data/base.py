@@ -10,6 +10,17 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
+import rasterio
+# Current format of the tif image
+# 0: Red
+# 1: Green
+# 2: Blue
+# 3: alpha
+# 4: Red (multispectral)
+# 5: Green (multispectral)
+# 6: Rededge (multispectral)
+# 7: NIR (multispectral)
+
 import numpy as np
 import psutil
 from torch.utils.data import Dataset
@@ -51,7 +62,7 @@ class BaseDataset(Dataset):
         img_path,
         imgsz=640,
         cache=False,
-        augment=True,
+        augment=False, # Change Augment to False
         hyp=DEFAULT_CFG,
         prefix="",
         rect=False,
@@ -151,9 +162,19 @@ class BaseDataset(Dataset):
                 except Exception as e:
                     LOGGER.warning(f"{self.prefix}WARNING ⚠️ Removing corrupt *.npy image file {fn} due to: {e}")
                     Path(fn).unlink(missing_ok=True)
-                    im = cv2.imread(f)  # BGR
+                    # im = cv2.imread(f)  # BGR
+                    with rasterio.open(f) as src:
+                        raw_image_data = src.read()
+                        band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                        im = raw_image_data[band_order, :, :]
+                        im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
             else:  # read image
-                im = cv2.imread(f)  # BGR
+                # im = cv2.imread(f)  # BGR
+                with rasterio.open(f) as src:
+                    raw_image_data = src.read()
+                    band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                    im = raw_image_data[band_order, :, :]
+                    im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
             if im is None:
                 raise FileNotFoundError(f"Image Not Found {f}")
 
@@ -162,9 +183,11 @@ class BaseDataset(Dataset):
                 r = self.imgsz / max(h0, w0)  # ratio
                 if r != 1:  # if sizes are not equal
                     w, h = (min(math.ceil(w0 * r), self.imgsz), min(math.ceil(h0 * r), self.imgsz))
-                    im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR)
+                    # im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR)
+                    im = rasterio.features.resize(im, (w, h), resampling=rasterio.enums.Resampling.bilinear)
             elif not (h0 == w0 == self.imgsz):  # resize by stretching image to square imgsz
-                im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR)
+                # im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR)
+                im = rasterio.features.resize(im, (self.imgsz, self.imgsz), resampling=rasterio.enums.Resampling.bilinear)
 
             # Add to buffer if training with augmentations
             if self.augment:
@@ -199,14 +222,25 @@ class BaseDataset(Dataset):
         """Saves an image as an *.npy file for faster loading."""
         f = self.npy_files[i]
         if not f.exists():
-            np.save(f.as_posix(), cv2.imread(self.im_files[i]), allow_pickle=False)
+            # np.save(f.as_posix(), cv2.imread(self.im_files[i]), allow_pickle=False)
+            with rasterio.open(self.im_files[i]) as src:
+                raw_image_data = src.read()
+                band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                im = raw_image_data[band_order, :, :]
+                im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
+                np.save(f.as_posix(), im, allow_pickle=False)
 
     def check_cache_ram(self, safety_margin=0.5):
         """Check image caching requirements vs available memory."""
         b, gb = 0, 1 << 30  # bytes of cached images, bytes per gigabytes
         n = min(self.ni, 30)  # extrapolate from 30 random images
         for _ in range(n):
-            im = cv2.imread(random.choice(self.im_files))  # sample image
+            # im = cv2.imread(random.choice(self.im_files))  # sample image
+            with rasterio.open(random.choice(self.im_files)) as src:
+                raw_image_data = src.read()
+                band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                im = raw_image_data[band_order, :, :]
+                im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
             ratio = self.imgsz / max(im.shape[0], im.shape[1])  # max(h, w)  # ratio
             b += im.nbytes * ratio**2
         mem_required = b * self.ni / n * (1 + safety_margin)  # GB required to cache dataset into RAM

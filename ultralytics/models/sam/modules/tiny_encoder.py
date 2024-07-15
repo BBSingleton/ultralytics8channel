@@ -562,7 +562,7 @@ class TinyViT(nn.Module):
     def __init__(
         self,
         img_size=224,
-        in_chans=3,
+        in_chans=8,
         num_classes=1000,
         embed_dims=(96, 192, 384, 768),
         depths=(2, 2, 6, 2),

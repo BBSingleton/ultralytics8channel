@@ -10,6 +10,7 @@ from threading import Thread
 from urllib.parse import urlparse
 
 import cv2
+import rasterio
 import numpy as np
 import requests
 import torch
@@ -360,7 +361,12 @@ class LoadImagesAndVideos:
                         self._new_video(self.files[self.count])
             else:
                 self.mode = "image"
-                im0 = cv2.imread(path)  # BGR
+                # im0 = cv2.imread(path)  # BGR
+                with rasterio.open(path) as src:
+                    raw_image_data = src.read()
+                    band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                    im0 = raw_image_data[band_order, :, :]
+                    im0 = np.transpose(im0, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
                 if im0 is None:
                     LOGGER.warning(f"WARNING ⚠️ Image Read Error {path}")
                 else:
@@ -409,7 +415,7 @@ class LoadPilAndNumpy:
         """Initialize PIL and Numpy Dataloader."""
         if not isinstance(im0, list):
             im0 = [im0]
-        self.paths = [getattr(im, "filename", f"image{i}.jpg") for i, im in enumerate(im0)]
+        self.paths = [getattr(im, "filename", f"image{i}.tif") for i, im in enumerate(im0)]
         self.im0 = [self._single_check(im) for im in im0]
         self.mode = "image"
         self.bs = len(self.im0)
@@ -464,7 +470,7 @@ class LoadTensor:
         self.im0 = self._single_check(im0)
         self.bs = self.im0.shape[0]
         self.mode = "image"
-        self.paths = [getattr(im, "filename", f"image{i}.jpg") for i, im in enumerate(im0)]
+        self.paths = [getattr(im, "filename", f"image{i}.tif") for i, im in enumerate(im0)]
 
     @staticmethod
     def _single_check(im, stride=32):

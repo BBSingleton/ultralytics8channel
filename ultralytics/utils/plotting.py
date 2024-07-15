@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
 import cv2
+import rasterio
+import rasterio.features
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -981,7 +983,7 @@ def plot_images(
         images *= 255  # de-normalise (optional)
 
     # Build Image
-    mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
+    mosaic = np.full((int(ns * h), int(ns * w), 8), 255, dtype=np.uint8)  # init #FIXME: used to be 3 channels only (RGB) now 8 channels
     for i in range(bs):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
         mosaic[y : y + h, x : x + w, :] = images[i].transpose(1, 2, 0)
@@ -991,7 +993,9 @@ def plot_images(
     if scale < 1:
         h = math.ceil(scale * h)
         w = math.ceil(scale * w)
-        mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+        # mosaic = cv2.resize(mosaic, tuple(int(x * ns) for x in (w, h)))
+        mosaic = rasterio.features.resize(mosaic, tuple(int(x * ns) for x in (w, h)), resampling=rasterio.enums.Resampling.bilinear)
+
 
     # Annotate
     fs = int((h + w) * ns * 0.01)  # font size

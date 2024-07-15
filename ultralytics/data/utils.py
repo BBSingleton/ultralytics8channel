@@ -13,6 +13,8 @@ from pathlib import Path
 from tarfile import is_tarfile
 
 import cv2
+import rasterio
+import rasterio.features
 import numpy as np
 from PIL import Image, ImageOps
 
@@ -166,6 +168,28 @@ def verify_image_label(args):
         return [None, None, None, None, None, nm, nf, ne, nc, msg]
 
 
+# def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
+#     """
+#     Convert a list of polygons to a binary mask of the specified image size.
+
+#     Args:
+#         imgsz (tuple): The size of the image as (height, width).
+#         polygons (list[np.ndarray]): A list of polygons. Each polygon is an array with shape [N, M], where
+#                                      N is the number of polygons, and M is the number of points such that M % 2 = 0.
+#         color (int, optional): The color value to fill in the polygons on the mask. Defaults to 1.
+#         downsample_ratio (int, optional): Factor by which to downsample the mask. Defaults to 1.
+
+#     Returns:
+#         (np.ndarray): A binary mask of the specified image size with the polygons filled in.
+#     """
+#     mask = np.zeros(imgsz, dtype=np.uint8)
+#     polygons = np.asarray(polygons, dtype=np.int32)
+#     polygons = polygons.reshape((polygons.shape[0], -1, 2))
+#     cv2.fillPoly(mask, polygons, color=color)
+#     nh, nw = (imgsz[0] // downsample_ratio, imgsz[1] // downsample_ratio)
+#     # Note: fillPoly first then resize is trying to keep the same loss calculation method when mask-ratio=1
+#     return cv2.resize(mask, (nw, nh))
+
 def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
     """
     Convert a list of polygons to a binary mask of the specified image size.
@@ -183,11 +207,10 @@ def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
     mask = np.zeros(imgsz, dtype=np.uint8)
     polygons = np.asarray(polygons, dtype=np.int32)
     polygons = polygons.reshape((polygons.shape[0], -1, 2))
-    cv2.fillPoly(mask, polygons, color=color)
+    rasterio.features.rasterize(polygons, out=mask, transform=rasterio.transform.from_origin(0, 0, imgsz[1], imgsz[0]), fill=color)
     nh, nw = (imgsz[0] // downsample_ratio, imgsz[1] // downsample_ratio)
-    # Note: fillPoly first then resize is trying to keep the same loss calculation method when mask-ratio=1
-    return cv2.resize(mask, (nw, nh))
-
+    mask = rasterio.features.resize(mask, (nw, nh), resampling=rasterio.enums.Resampling.nearest)
+    return mask
 
 def polygons2masks(imgsz, polygons, color, downsample_ratio=1):
     """
@@ -611,12 +634,21 @@ def compress_one_image(f, f_new=None, max_dim=1920, quality=50):
         im.save(f_new or f, "JPEG", quality=quality, optimize=True)  # save
     except Exception as e:  # use OpenCV
         LOGGER.info(f"WARNING ⚠️ HUB ops PIL failure {f}: {e}")
-        im = cv2.imread(f)
+        # im = cv2.imread(f)
+        with rasterio.open(f) as src:
+            raw_image_data = src.read()
+            band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+            im = raw_image_data[band_order, :, :]
+            im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
         im_height, im_width = im.shape[:2]
         r = max_dim / max(im_height, im_width)  # ratio
+        # if r < 1.0:  # image too large
+        #     im = cv2.resize(im, (int(im_width * r), int(im_height * r)), interpolation=cv2.INTER_AREA)
+        # cv2.imwrite(str(f_new or f), im)
         if r < 1.0:  # image too large
-            im = cv2.resize(im, (int(im_width * r), int(im_height * r)), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(str(f_new or f), im)
+            im = rasterio.features.resize(im, (int(im_width * r), int(im_height * r)), resampling=rasterio.enums.Resampling.bilinear)
+        with rasterio.open(str(f_new or f), 'w', driver='GTiff', width=im.shape[1], height=im.shape[0], count=im.shape[2], dtype=im.dtype) as dst:
+            dst.write(im)
 
 
 def autosplit(path=DATASETS_DIR / "coco8/images", weights=(0.9, 0.1, 0.0), annotated_only=False):

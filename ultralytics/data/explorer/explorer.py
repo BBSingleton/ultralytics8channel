@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, List, Tuple, Union
 
 import cv2
+import rasterio
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
@@ -32,7 +33,12 @@ class ExplorerDataset(YOLODataset):
             if fn.exists():  # load npy
                 im = np.load(fn)
             else:  # read image
-                im = cv2.imread(f)  # BGR
+                # im = cv2.imread(f)  # BGR
+                with rasterio.open(f) as src:
+                    raw_image_data = src.read()
+                    band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                    im = raw_image_data[band_order, :, :]
+                    im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
                 if im is None:
                     raise FileNotFoundError(f"Image Not Found {f}")
             h0, w0 = im.shape[:2]  # orig hw

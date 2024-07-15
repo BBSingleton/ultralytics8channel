@@ -6,6 +6,7 @@ from math import ceil
 from pathlib import Path
 
 import cv2
+import rasterio
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -165,7 +166,12 @@ def crop_and_save(anno, windows, window_objs, im_dir, lb_dir):
                     - train
                     - val
     """
-    im = cv2.imread(anno["filepath"])
+    # im = cv2.imread(anno["filepath"])
+    with rasterio.open(anno["filepath"]) as src:
+        raw_image_data = src.read()
+        band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+        im = raw_image_data[band_order, :, :]
+        im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
     name = Path(anno["filepath"]).stem
     for i, window in enumerate(windows):
         x_start, y_start, x_stop, y_stop = window.tolist()
@@ -173,7 +179,9 @@ def crop_and_save(anno, windows, window_objs, im_dir, lb_dir):
         patch_im = im[y_start:y_stop, x_start:x_stop]
         ph, pw = patch_im.shape[:2]
 
-        cv2.imwrite(str(Path(im_dir) / f"{new_name}.jpg"), patch_im)
+        # cv2.imwrite(str(Path(im_dir) / f"{new_name}.jpg"), patch_im)
+        with rasterio.open(str(Path(im_dir) / f"{new_name}.tif"), 'w', driver='GTiff', width=im.shape[1], height=im.shape[0], count=im.shape[2], dtype=im.dtype) as dst:
+            dst.write(im)
         label = window_objs[i]
         if len(label) == 0:
             continue
@@ -275,13 +283,20 @@ def split_test(data_root, save_dir, crop_size=1024, gap=200, rates=(1.0,)):
     for im_file in tqdm(im_files, total=len(im_files), desc="test"):
         w, h = exif_size(Image.open(im_file))
         windows = get_windows((h, w), crop_sizes=crop_sizes, gaps=gaps)
-        im = cv2.imread(im_file)
+        # im = cv2.imread(im_file)
+        with rasterio.open(im_file) as src:
+            raw_image_data = src.read()
+            band_order = [2, 1, 0, 3, 4, 5, 6, 7]
+            im = raw_image_data[band_order, :, :]
+            im = np.transpose(im, (1, 2, 0))
         name = Path(im_file).stem
         for window in windows:
             x_start, y_start, x_stop, y_stop = window.tolist()
             new_name = f"{name}__{x_stop - x_start}__{x_start}___{y_start}"
             patch_im = im[y_start:y_stop, x_start:x_stop]
-            cv2.imwrite(str(save_dir / f"{new_name}.jpg"), patch_im)
+            # cv2.imwrite(str(save_dir / f"{new_name}.jpg"), patch_im)
+            with rasterio.open(str(save_dir / f"{new_name}.tif"), 'w', driver='GTiff', width=patch_im.shape[1], height=patch_im.shape[0], count=patch_im.shape[2], dtype=patch_im.dtype) as dst:
+                dst.write(patch_im)
 
 
 if __name__ == "__main__":

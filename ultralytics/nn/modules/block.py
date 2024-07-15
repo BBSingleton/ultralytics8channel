@@ -477,7 +477,7 @@ class C2fAttn(nn.Module):
 class ImagePoolingAttn(nn.Module):
     """ImagePoolingAttn: Enhance the text embeddings with image-aware information."""
 
-    def __init__(self, ec=256, ch=(), ct=512, nh=8, k=3, scale=False):
+    def __init__(self, ec=256, ch=8, ct=512, nh=8, k=3, scale=False):
         """Initializes ImagePoolingAttn with specified arguments."""
         super().__init__()
 

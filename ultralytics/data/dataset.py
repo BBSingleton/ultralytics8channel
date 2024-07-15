@@ -8,6 +8,7 @@ from multiprocessing.pool import ThreadPool
 from pathlib import Path
 
 import cv2
+import rasterio
 import numpy as np
 import torch
 from PIL import Image
@@ -454,15 +455,33 @@ class ClassificationDataset:
         f, j, fn, im = self.samples[i]  # filename, index, filename.with_suffix('.npy'), image
         if self.cache_ram:
             if im is None:  # Warning: two separate if statements required here, do not combine this with previous line
-                im = self.samples[i][3] = cv2.imread(f)
+                # im = self.samples[i][3] = cv2.imread(f)
+                with rasterio.open(f) as src:
+                    raw_image_data = src.read()
+                    band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                    im = raw_image_data[band_order, :, :]
+                    im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
+                    im = self.samples[i][3] = im
         elif self.cache_disk:
             if not fn.exists():  # load npy
-                np.save(fn.as_posix(), cv2.imread(f), allow_pickle=False)
+                # np.save(fn.as_posix(), cv2.imread(f), allow_pickle=False)
+                with rasterio.open(f) as src:
+                    raw_image_data = src.read()
+                    band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                    im = raw_image_data[band_order, :, :]
+                    im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
+                    np.save(fn.as_posix(), im, allow_pickle=False)
             im = np.load(fn)
         else:  # read image
-            im = cv2.imread(f)  # BGR
+            # im = cv2.imread(f)  # BGR
+            with rasterio.open(f) as src:
+                raw_image_data = src.read()
+                band_order = [2, 1, 0, 3, 4, 5, 6, 7] # Reorder bands to BGR followed by the remaining bands
+                im = raw_image_data[band_order, :, :]
+                im = np.transpose(im, (1, 2, 0)) # Convert from (bands, height, width) to (height, width, bands)
         # Convert NumPy array to PIL image
-        im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+        # im = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
+        im = Image.fromarray(im.astype(np.uint8))  # Ensure data type is uint8 for proper image handling #FIXME: Check if this is correct currently using input im of BGR format
         sample = self.torch_transforms(im)
         return {"img": sample, "cls": j}
 
