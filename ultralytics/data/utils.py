@@ -184,7 +184,7 @@ def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
     mask = np.zeros(imgsz, dtype=np.uint8)
     polygons = np.asarray(polygons, dtype=np.int32)
     polygons = polygons.reshape((polygons.shape[0], -1, 2))
-    # cv2.fillPoly(mask, polygons, color=color) # FIXME: Might need to change to use rasterio.features.geometry_mask
+    # cv2.fillPoly(mask, polygons, color=color) # FIXME: Changed to use rasterio.features.geometry_mask
     with rasterio.Env():
         mask = rasterio.features.geometry_mask(polygons, out_shape=imgsz, transform=rasterio.Affine(1, 0, 0, 0, -1, 0), invert=True)
     nh, nw = (imgsz[0] // downsample_ratio, imgsz[1] // downsample_ratio)
