@@ -10,7 +10,6 @@ from threading import Thread
 from urllib.parse import urlparse
 
 import cv2
-import rasterio
 import numpy as np
 import requests
 import torch
@@ -361,9 +360,7 @@ class LoadImagesAndVideos:
                         self._new_video(self.files[self.count])
             else:
                 self.mode = "image"
-                # im0 = cv2.imread(path, cv2.IMREAD_UNCHANGED)  # BGR # FIXME: Changed to rasterio
-                with rasterio.open(path) as src:
-                    im0 = src.read()
+                im0 = cv2.imread(path)  # BGR
                 if im0 is None:
                     LOGGER.warning(f"WARNING ⚠️ Image Read Error {path}")
                 else:

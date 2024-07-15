@@ -10,11 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
-import rasterio
 import numpy as np
 import psutil
-import rasterio.env
-import rasterio.warp
 from torch.utils.data import Dataset
 
 from ultralytics.data.utils import FORMATS_HELP_MSG, HELP_URL, IMG_FORMATS
@@ -48,13 +45,13 @@ class BaseDataset(Dataset):
         npy_files (list): List of numpy file paths.
         transforms (callable): Image transformation function.
     """
-# augment=True changed to augment=False
+
     def __init__(
         self,
         img_path,
         imgsz=640,
         cache=False,
-        augment=False,
+        augment=True,
         hyp=DEFAULT_CFG,
         prefix="",
         rect=False,
@@ -154,11 +151,9 @@ class BaseDataset(Dataset):
                 except Exception as e:
                     LOGGER.warning(f"{self.prefix}WARNING ⚠️ Removing corrupt *.npy image file {fn} due to: {e}")
                     Path(fn).unlink(missing_ok=True)
-                    with rasterio.open(f) as src:
-                        im = src.read()
+                    im = cv2.imread(f)  # BGR
             else:  # read image
-                with rasterio.open(f) as src:
-                        im = src.read()  # BGR
+                im = cv2.imread(f)  # BGR
             if im is None:
                 raise FileNotFoundError(f"Image Not Found {f}")
 
@@ -167,13 +162,10 @@ class BaseDataset(Dataset):
                 r = self.imgsz / max(h0, w0)  # ratio
                 if r != 1:  # if sizes are not equal
                     w, h = (min(math.ceil(w0 * r), self.imgsz), min(math.ceil(h0 * r), self.imgsz))
-                    # im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR) # FIXME Changed: cv2 to use rasterio
-                    with rasterio.env():
-                        im = rasterio.warp.resize(im, (w, h), method='bilinear')
+                    im = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR)
             elif not (h0 == w0 == self.imgsz):  # resize by stretching image to square imgsz
-                # im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR) # FIXME: cv2 might need to be replaced with rasterio
-                with rasterio.env():
-                    im = rasterio.warp.resize(im, (self.w, self.h), method='bilinear')
+                im = cv2.resize(im, (self.imgsz, self.imgsz), interpolation=cv2.INTER_LINEAR)
+
             # Add to buffer if training with augmentations
             if self.augment:
                 self.ims[i], self.im_hw0[i], self.im_hw[i] = im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
@@ -207,18 +199,14 @@ class BaseDataset(Dataset):
         """Saves an image as an *.npy file for faster loading."""
         f = self.npy_files[i]
         if not f.exists():
-            with rasterio.open(self.im_files[i]) as src:
-                im = src.read()
-            np.save(f, im, allow_pickle=False) # FIXME: Changed: rasterio was used to read the image rather than cv2
-            # np.save(f.as_posix(), cv2.imread(self.im_files[i], cv2.IMREAD_UNCHANGED), allow_pickle=False)
+            np.save(f.as_posix(), cv2.imread(self.im_files[i]), allow_pickle=False)
 
     def check_cache_ram(self, safety_margin=0.5):
         """Check image caching requirements vs available memory."""
         b, gb = 0, 1 << 30  # bytes of cached images, bytes per gigabytes
         n = min(self.ni, 30)  # extrapolate from 30 random images
         for _ in range(n):
-            with rasterio.open(random.choice(self.im_files)) as src:
-                im = src.read()
+            im = cv2.imread(random.choice(self.im_files))  # sample image
             ratio = self.imgsz / max(im.shape[0], im.shape[1])  # max(h, w)  # ratio
             b += im.nbytes * ratio**2
         mem_required = b * self.ni / n * (1 + safety_margin)  # GB required to cache dataset into RAM

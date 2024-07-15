@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, List, Tuple, Union
 
 import cv2
-import rasterio
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
@@ -33,9 +32,7 @@ class ExplorerDataset(YOLODataset):
             if fn.exists():  # load npy
                 im = np.load(fn)
             else:  # read image
-                # im = cv2.imread(f, cv2.IMREAD_UNCHANGED)  # BGR # FIXME: Changed to rasterio
-                with rasterio.open(f) as src:
-                    im = src.read()
+                im = cv2.imread(f)  # BGR
                 if im is None:
                     raise FileNotFoundError(f"Image Not Found {f}")
             h0, w0 = im.shape[:2]  # orig hw

@@ -6,7 +6,6 @@ from math import ceil
 from pathlib import Path
 
 import cv2
-import rasterio
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -166,9 +165,7 @@ def crop_and_save(anno, windows, window_objs, im_dir, lb_dir):
                     - train
                     - val
     """
-    # im = cv2.imread(anno["filepath"], cv2.IMREAD_UNCHANGED) # FXIME: Changed: rasterio used to read images
-    with rasterio.open(anno["filepath"]) as src:
-        im = src.read()
+    im = cv2.imread(anno["filepath"])
     name = Path(anno["filepath"]).stem
     for i, window in enumerate(windows):
         x_start, y_start, x_stop, y_stop = window.tolist()
@@ -176,9 +173,7 @@ def crop_and_save(anno, windows, window_objs, im_dir, lb_dir):
         patch_im = im[y_start:y_stop, x_start:x_stop]
         ph, pw = patch_im.shape[:2]
 
-        # cv2.imwrite(str(Path(im_dir) / f"{new_name}.jpg"), patch_im) # FIXME: Changed rasterio used to save images
-        with rasterio.open(Path(im_dir) / f"{new_name}.tif", "w", **src.profile) as dst:
-            dst.write(patch_im)
+        cv2.imwrite(str(Path(im_dir) / f"{new_name}.jpg"), patch_im)
         label = window_objs[i]
         if len(label) == 0:
             continue
@@ -280,17 +275,13 @@ def split_test(data_root, save_dir, crop_size=1024, gap=200, rates=(1.0,)):
     for im_file in tqdm(im_files, total=len(im_files), desc="test"):
         w, h = exif_size(Image.open(im_file))
         windows = get_windows((h, w), crop_sizes=crop_sizes, gaps=gaps)
-        # im = cv2.imread(im_file, cv2.IMREAD_UNCHANGED) # FIXME: Changed: rasterio used to read images
-        with rasterio.open(im_file) as src:
-            im = src.read()
+        im = cv2.imread(im_file)
         name = Path(im_file).stem
         for window in windows:
             x_start, y_start, x_stop, y_stop = window.tolist()
             new_name = f"{name}__{x_stop - x_start}__{x_start}___{y_start}"
             patch_im = im[y_start:y_stop, x_start:x_stop]
-            # cv2.imwrite(str(save_dir / f"{new_name}.jpg"), patch_im) # FIXME: Changed: rasterio used to save images
-            with rasterio.open(str(save_dir / f"{new_name}.tif"), "w", **src.profile) as dst:
-                dst.write(patch_im)
+            cv2.imwrite(str(save_dir / f"{new_name}.jpg"), patch_im)
 
 
 if __name__ == "__main__":

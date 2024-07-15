@@ -5,7 +5,6 @@ from collections import defaultdict
 from pathlib import Path
 
 import cv2
-import rasterio
 import numpy as np
 
 from ultralytics.utils import LOGGER, TQDM
@@ -426,9 +425,7 @@ def convert_dota_to_yolo_obb(dota_root_path: str):
             if image_path.suffix != ".png":
                 continue
             image_name_without_ext = image_path.stem
-            with rasterio.open(image_path) as src: # FIXME: Changed to rasterio.open
-                img = src.read()
-            # img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+            img = cv2.imread(str(image_path))
             h, w = img.shape[:2]
             convert_label(image_name_without_ext, w, h, orig_label_dir, save_dir)
 
@@ -543,9 +540,7 @@ def yolo_bbox2segment(im_dir, save_dir=None, sam_model="sam_b.pt"):
             continue
         boxes[:, [0, 2]] *= w
         boxes[:, [1, 3]] *= h
-        # im = cv2.imread(label["im_file"], cv2.IMREAD_UNCHANGED)
-        with rasterio.open(label["im_file"]) as src: # FIXME: Changed to rasterio.open
-            im = src.read() 
+        im = cv2.imread(label["im_file"])
         sam_results = sam_model(im, bboxes=xywh2xyxy(boxes), verbose=False, save=False)
         label["segments"] = sam_results[0].masks.xyn
 

@@ -13,7 +13,6 @@ from pathlib import Path
 from tarfile import is_tarfile
 
 import cv2
-import rasterio
 import numpy as np
 from PIL import Image, ImageOps
 
@@ -184,14 +183,11 @@ def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):
     mask = np.zeros(imgsz, dtype=np.uint8)
     polygons = np.asarray(polygons, dtype=np.int32)
     polygons = polygons.reshape((polygons.shape[0], -1, 2))
-    # cv2.fillPoly(mask, polygons, color=color) # FIXME: Changed to use rasterio.features.geometry_mask
-    with rasterio.Env():
-        mask = rasterio.features.geometry_mask(polygons, out_shape=imgsz, transform=rasterio.Affine(1, 0, 0, 0, -1, 0), invert=True)
+    cv2.fillPoly(mask, polygons, color=color)
     nh, nw = (imgsz[0] // downsample_ratio, imgsz[1] // downsample_ratio)
-    # return cv2.resize(mask, (nw, nh)) # FIXME: Changed to use rasterio to support all formats
-    with rasterio.Env():
-        mask = rasterio.warp.resize(mask, (nh, nw), method='nearest')
-    return mask
+    # Note: fillPoly first then resize is trying to keep the same loss calculation method when mask-ratio=1
+    return cv2.resize(mask, (nw, nh))
+
 
 def polygons2masks(imgsz, polygons, color, downsample_ratio=1):
     """
@@ -615,18 +611,13 @@ def compress_one_image(f, f_new=None, max_dim=1920, quality=50):
         im.save(f_new or f, "JPEG", quality=quality, optimize=True)  # save
     except Exception as e:  # use OpenCV
         LOGGER.info(f"WARNING ⚠️ HUB ops PIL failure {f}: {e}")
-        # im = cv2.imread(f, cv2.IMREAD_UNCHANGED) # FIXME: Changed to rasterio.open to support all formats
-        with rasterio.open(f) as src:
-            im = src.read()
+        im = cv2.imread(f)
         im_height, im_width = im.shape[:2]
         r = max_dim / max(im_height, im_width)  # ratio
         if r < 1.0:  # image too large
-            # im = cv2.resize(im, (int(im_width * r), int(im_height * r)), interpolation=cv2.INTER_AREA) # FIXME: Changed to rasterio to support all formats
-            with rasterio.Env():
-                im = rasterio.warp.resize(im, (int(im_width * r), int(im_height * r), im.shape[2]), method='nearest')
-        # cv2.imwrite(str(f_new or f), im) # FIXME: Changed to rasterio to support all formats
-        with rasterio.open(f_new or f, 'w', **src.profile) as dst:
-            dst.write(im)
+            im = cv2.resize(im, (int(im_width * r), int(im_height * r)), interpolation=cv2.INTER_AREA)
+        cv2.imwrite(str(f_new or f), im)
+
 
 def autosplit(path=DATASETS_DIR / "coco8/images", weights=(0.9, 0.1, 0.0), annotated_only=False):
     """

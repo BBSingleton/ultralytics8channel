@@ -4,7 +4,6 @@ import getpass
 from typing import List
 
 import cv2
-import rasterio
 import numpy as np
 
 from ultralytics.data.augment import LetterBox
@@ -80,10 +79,8 @@ def plot_query_result(similar_set, plot_labels=True):
     plot_size = 640
     imgs, batch_idx, plot_boxes, plot_masks, plot_kpts = [], [], [], [], []
     for i, imf in enumerate(images):
-        # im = cv2.imread(imf, cv2.IMREAD_UNCHANGED) # FIXME: Changed to rasterio 
-        with rasterio.open(imf) as src:
-            im = src.read()
-        # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB) # FIXME: Changed to rasterio
+        im = cv2.imread(imf)
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         h, w = im.shape[:2]
         r = min(plot_size / h, plot_size / w)
         imgs.append(LetterBox(plot_size, center=False)(image=im).transpose(2, 0, 1))

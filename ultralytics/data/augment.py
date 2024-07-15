@@ -6,7 +6,6 @@ from copy import deepcopy
 from typing import Tuple, Union
 
 import cv2
-import rasterio
 import numpy as np
 import torch
 from PIL import Image
@@ -457,9 +456,7 @@ class RandomPerspective:
         # a += random.choice([-180, -90, 0, 90])  # add 90deg rotations to small rotations
         s = random.uniform(1 - self.scale, 1 + self.scale)
         # s = 2 ** random.uniform(-scale, scale)
-        # R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s) # FIXME: Changed to use rasterio
-        with rasterio.Env():
-            R[:2] = rasterio.warp.get_rotation_matrix(angle=a, center=(0, 0), scale=s)
+        R[:2] = cv2.getRotationMatrix2D(angle=a, center=(0, 0), scale=s)
 
         # Shear
         S = np.eye(3, dtype=np.float32)
@@ -476,13 +473,9 @@ class RandomPerspective:
         # Affine image
         if (border[0] != 0) or (border[1] != 0) or (M != np.eye(3)).any():  # image changed
             if self.perspective:
-                # img = cv2.warpPerspective(img, M, dsize=self.size, borderValue=(114, 114, 114)) # FIXME: Changed to use rasterio
-                with rasterio.Env():
-                    img = rasterio.warp.warp(img, M, dsize=self.size, borderValue=(114, 114, 114))
+                img = cv2.warpPerspective(img, M, dsize=self.size, borderValue=(114, 114, 114))
             else:  # affine
-                # img = cv2.warpAffine(img, M[:2], dsize=self.size, borderValue=(114, 114, 114)) # FIXME: Changed to use rasterio
-                with rasterio.Env():
-                    img = rasterio.warp.warp(img, M[:2], dsize=self.size, borderValue=(114, 114, 114))
+                img = cv2.warpAffine(img, M[:2], dsize=self.size, borderValue=(114, 114, 114))
         return img, M, s
 
     def apply_bboxes(self, bboxes, M):
@@ -662,9 +655,7 @@ class RandomHSV:
         img = labels["img"]
         if self.hgain or self.sgain or self.vgain:
             r = np.random.uniform(-1, 1, 3) * [self.hgain, self.sgain, self.vgain] + 1  # random gains
-            # hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV)) # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                hue, sat, val = rasterio.warp.get_hsv(img)
+            hue, sat, val = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
             dtype = img.dtype  # uint8
 
             x = np.arange(0, 256, dtype=r.dtype)
@@ -672,13 +663,8 @@ class RandomHSV:
             lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
             lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
 
-            # im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val))) # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                im_hsv = rasterio.warp.merge((rasterio.warp.lut(hue, lut_hue), rasterio.warp.lut(sat, lut_sat), rasterio.warp.lut(val, lut_val)))
-            # cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                rasterio.warp.get_rgb(im_hsv, dst=img)
-        labels["img"] = img
+            im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
+            cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
         return labels
 
 
@@ -782,16 +768,12 @@ class LetterBox:
             dh /= 2
 
         if shape[::-1] != new_unpad:  # resize
-            # img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR) # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                img = rasterio.warp.resize(img, new_unpad, interpolation=rasterio.enums.Resampling.bilinear)
+            img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
         top, bottom = int(round(dh - 0.1)) if self.center else 0, int(round(dh + 0.1))
         left, right = int(round(dw - 0.1)) if self.center else 0, int(round(dw + 0.1))
-        # img = cv2.copyMakeBorder( # FIXME: Changed to use rasterio
-        #     img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-        # )  # add border
-        with rasterio.Env():
-            img = rasterio.warp.add_border(img, top, bottom, left, right, border_value=(114, 114, 114))
+        img = cv2.copyMakeBorder(
+            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+        )  # add border
         if labels.get("ratio_pad"):
             labels["ratio_pad"] = (labels["ratio_pad"], (left, top))  # for evaluation
 
@@ -866,16 +848,10 @@ class CopyPaste:
             for j in random.sample(list(indexes), k=round(self.p * n)):
                 cls = np.concatenate((cls, cls[[j]]), axis=0)
                 instances = Instances.concatenate((instances, ins_flip[[j]]), axis=0)
-                # cv2.drawContours(im_new, instances.segments[[j]].astype(np.int32), -1, (1, 1, 1), cv2.FILLED) # FIXME: Changed to use rasterio
-                with rasterio.Env():
-                    rasterio.warp.draw_contours(im_new, instances.segments[[j]].astype(np.int32), -1, (1, 1, 1), fill=True)
+                cv2.drawContours(im_new, instances.segments[[j]].astype(np.int32), -1, (1, 1, 1), cv2.FILLED)
 
-            # result = cv2.flip(im, 1)  # augment segments (flip left-right) # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                result = rasterio.warp.flip(im, 1)
-            # i = cv2.flip(im_new, 1).astype(bool) # FIXME: Changed to use rasterio
-            with rasterio.Env():
-                i = rasterio.warp.flip(im_new, 1).astype(bool)
+            result = cv2.flip(im, 1)  # augment segments (flip left-right)
+            i = cv2.flip(im_new, 1).astype(bool)
             im[i] = result[i]
 
         labels["img"] = im
@@ -950,12 +926,12 @@ class Albumentations:
 
             # Transforms
             T = [
-                # A.Blur(p=0.01),
-                # A.MedianBlur(p=0.01),
-                # A.ToGray(p=0.01),
-                # A.CLAHE(p=0.01),
-                # A.RandomBrightnessContrast(p=0.0),
-                # A.RandomGamma(p=0.0),
+                A.Blur(p=0.01),
+                A.MedianBlur(p=0.01),
+                A.ToGray(p=0.01),
+                A.CLAHE(p=0.01),
+                A.RandomBrightnessContrast(p=0.0),
+                A.RandomGamma(p=0.0),
                 A.ImageCompression(quality_lower=75, p=0.0),
             ]
 
@@ -1400,10 +1376,7 @@ class ClassifyLetterBox:
 
         # Create padded image
         im_out = np.full((hs, ws, 3), 114, dtype=im.dtype)
-        # im_out[top : top + h, left : left + w] = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR) # FIXME: Changed to use rasterio
-        with rasterio.Env():
-            im_resized = rasterio.warp.resize(im, (w, h))
-            im_out[top : top + h, left : left + w] = im_resized
+        im_out[top : top + h, left : left + w] = cv2.resize(im, (w, h), interpolation=cv2.INTER_LINEAR)
         return im_out
 
 
@@ -1433,9 +1406,8 @@ class CenterCrop:
         imh, imw = im.shape[:2]
         m = min(imh, imw)  # min dimension
         top, left = (imh - m) // 2, (imw - m) // 2
-        # return cv2.resize(im[top : top + m, left : left + m], (self.w, self.h), interpolation=cv2.INTER_LINEAR) # FIXME: Changed to use rasterio
-        with rasterio.Env():
-            return rasterio.warp.resize(im[top : top + m, left : left + m], (self.w, self.h), method='bilinear')
+        return cv2.resize(im[top : top + m, left : left + m], (self.w, self.h), interpolation=cv2.INTER_LINEAR)
+
 
 # NOTE: keep this class for backward compatibility
 class ToTensor:

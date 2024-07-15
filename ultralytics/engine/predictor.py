@@ -35,7 +35,6 @@ import threading
 from pathlib import Path
 
 import cv2
-import rasterio
 import numpy as np
 import torch
 
@@ -232,8 +231,7 @@ class BasePredictor:
 
             # Warmup model
             if not self.done_warmup:
-                # self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
-                self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 8, *self.imgsz)) # 8-channel input
+                self.model.warmup(imgsz=(1 if self.model.pt or self.model.triton else self.dataset.bs, 3, *self.imgsz))
                 self.done_warmup = True
 
             self.seen, self.windows, self.batch = 0, [], None
@@ -392,7 +390,7 @@ class BasePredictor:
             self.windows.append(p)
             cv2.namedWindow(p, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)  # allow window resize (Linux)
             cv2.resizeWindow(p, im.shape[1], im.shape[0])  # (width, height)
-        cv2.imshow(p, im) # FIXME: Might need to be changed to use rasterio
+        cv2.imshow(p, im)
         cv2.waitKey(300 if self.dataset.mode == "image" else 1)  # 1 millisecond
 
     def run_callbacks(self, event: str):
